@@ -1,0 +1,32 @@
+{
+  "name": "anyfs-s3-adapter",
+  "version": "0.1.0",
+  "description": "AWS S3 adapter for AnyFS",
+  "main": "index.js",
+  "scripts": {
+    "test": "./node_modules/mocha/bin/mocha"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anyfs/s3-adapter.git"
+  },
+  "keywords": [
+    "aws",
+    "s3",
+    "anyfs",
+    "gulpplugin"
+  ],
+  "author": "Liu Dong <ddliuhb@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/anyfs/s3-adapter/issues"
+  },
+  "homepage": "https://github.com/anyfs/s3-adapter",
+  "dependencies": {
+    "aws-sdk": "^2.1.23"
+  },
+  "devDependencies": {
+    "anyfs": "^0.1.4",
+    "mocha": "^2.2.4"
+  }
+}
