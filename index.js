@@ -3,6 +3,8 @@
 var path = require('path');
 var AWS = require('aws-sdk');
 var PassThrough = require('stream').PassThrough;
+var when = require('when');
+var nodefn = require('when/node');
 
 module.exports = Adapter;
 
@@ -35,7 +37,7 @@ function parseMetadata(p, data) {
     };
 
     if (!isDir) {
-        metadata.size = data.ContentLength;
+        metadata.size = parseInt(data.ContentLength);
     }
 
     return metadata;
@@ -94,7 +96,7 @@ Adapter.prototype.metadata = function(p, cb) {
 Adapter.prototype.list = function(p, cb) {
     p = p.substr(1);
     this.s3.listObjects({
-        Prefix: p,
+        Prefix: p + '/',
         Delimiter: '/',
     }, function(err, data) {
         if (err) {
@@ -102,6 +104,14 @@ Adapter.prototype.list = function(p, cb) {
         }
 
         var list = []
+        // common prefixes as directory
+        for (var i = 0, length = data.CommonPrefixes.length; i < length; i++) {
+            list.push({
+                name: path.basename(data.CommonPrefixes[i].Prefix),
+                is_dir: true,
+            });
+        }
+
         for (var i = 0, length = data.Contents.length; i < length; i++) {
             var item = data.Contents[i];
             // ignore .
@@ -127,67 +137,115 @@ Adapter.prototype.mkdir = function(p, cb) {
     })
 };
 
-Adapter.prototype.features.DELETE_RECURSIVE = true;
+Adapter.prototype.features.DELETE_IGNORE_EMPTY = true;
 Adapter.prototype.delete = function(p, cb) {
     p = p.substr(1);
-    var self = this;
-    this.s3.headObject({
+    this.s3.deleteObject({
         Key: p
     }, function(err, data) {
-        if (!err) {
-            self.s3.deleteObject({
-                Key: p,
-            }, function(err) {
-                cb(parseError(err));
-            });
-            return;
-        }
+        cb(parseError(err));
+    });
+};
 
-        if (err.statusCode !== 404) {
+Adapter.prototype.features.DELETE_RECURSIVE = true;
+Adapter.prototype.deleteDir = function(p, cb) {
+    p = p.substr(1);
+
+    var self = this;
+    // list by prefix, and delete all
+    this.s3.listObjects({
+        Prefix: p + '/'
+    }, function(err, data) {
+        if (err) {
             return cb(parseError(err));
         }
 
-        // try remove directory
-        // list by prefix, and delete all
+        if (data.Contents.length === 0) {
+            return cb();
+        }
+
+        var keys = [];
+        for (var i = 0, length = data.Contents.length; i < length; i++) {
+            keys.push({
+                Key: data.Contents[i].Key
+            });
+        }
+
+        self.s3.deleteObjects({
+            Delete: {
+                Objects: keys,
+            }
+        }, function(err, data) {
+            cb(parseError(err));
+        });
+    });
+};
+
+Adapter.prototype.move = function(a, b, cb) {
+    a = a.substr(1);
+    b = b.substr(1);
+
+    var self = this;
+    this.metadata('/' + a, function(err, metadata) {
+        if (err) {
+            return cb(err);
+        }
+
+        if (!metadata.is_dir) {
+            return self.s3.copyObject({
+                CopySource: self.options.bucket + '/' + a,
+                Key: b,
+            }, function(err, data) {
+                if (err) {
+                    return cb(parseError(err));
+                }
+
+                self.delete('/' + a, function(err) {
+                    cb();
+                });
+            });
+        }
+
         self.s3.listObjects({
-            Prefix: p + '/'
+            Prefix: a + '/',
         }, function(err, data) {
             if (err) {
                 return cb(parseError(err));
             }
 
-            if (data.Contents.length === 0) {
-                return cb();
-            }
+            var list = data.Contents;
 
-            var keys = [];
-            for (var i = 0, length = data.Contents.length; i < length; i++) {
-                keys.push({
-                    Key: data.Contents[i].Key
+            var fn = nodefn.lift(self.s3.copyObject);
+
+            var aLength = a.length;
+            when.all(list.map(function(info) {
+                var key = info.Key;
+                var relative = key.substr(aLength + 1);
+                return fn.call(self.s3, {
+                    CopySource: self.options.bucket + '/' + key,
+                    Key: b + '/' + relative,
                 });
-            }
+            }))
+            .then(function() {
+                var deleteKeys = list.map(function(info) {
+                    return {
+                        Key: info.Key,
+                    };
+                });
 
-            self.s3.deleteObjects({
-                Delete: {
-                    Objects: keys,
-                }
-            }, function(err, data) {
-                cb(parseError(err));
+                var fn = nodefn.lift(self.s3.deleteObjects);
+                return fn.call(self.s3, {
+                    Delete: {
+                        Objects: deleteKeys
+                    }
+                });
+            })
+            .done(function() {
+                cb();
+            }, function(err) {
+                cb(err);
             });
         });
-    });
-};
-
-// FIXME: consider directory
-Adapter.prototype.move = function(a, b, cb) {
-    a = a.substr(1);
-    b = b.substr(1);
-
-    this.s3.copyObject({
-        CopySource: a, 
-        Key: b,
-    }, function(err, data) {
-        cb(parseError(err));
     });
 };
 

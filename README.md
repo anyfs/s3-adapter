@@ -2,6 +2,7 @@
 
 [![npm](https://img.shields.io/npm/v/anyfs-s3-adapter.svg?style=flat-square)](https://www.npmjs.com/package/anyfs-s3-adapter)
 [![npm](https://img.shields.io/npm/dm/anyfs-s3-adapter.svg?style=flat-square)](https://www.npmjs.com/package/anyfs-s3-adapter)
+[![Travis](https://img.shields.io/travis/anyfs/s3-adapter.svg?style=flat-square)](https://travis-ci.org/anyfs/s3-adapter)
 ![npm](https://img.shields.io/npm/l/anyfs-s3-adapter.svg?style=flat-square)
 
 AWS S3 adapter for AnyFS
